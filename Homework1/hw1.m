@@ -15,6 +15,7 @@ hw1c = imsubtract(hw1a,hw1b);
 sobelFilter = fspecial('sobel');
 hw1d = imfilter(hw1a, sobelFilter);
 
+
 % Creating avgerage Filter
 fiveFiveAvgFilter = 1/ (5. ^2)*ones (5);
 hw1e = imfilter(hw1d, fiveFiveAvgFilter); 
