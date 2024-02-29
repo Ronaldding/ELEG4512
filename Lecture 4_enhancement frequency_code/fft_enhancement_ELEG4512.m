@@ -246,3 +246,26 @@ order=2;
 im=double(imread('PET_image.tif'));
 [r, c]=size(im);
 homofil(im,d,r,c,order);
+
+%% BR filter
+clc;
+clear;
+I=imread('test1.tif');
+sigma1=10;
+sigma2=20;
+% sigma3=30;
+ff=imgaussflpf(I,sigma1);ff=1-ff;
+out=imfreqfilt(I,ff);
+ff1=imgaussflpf(I,sigma2);ff1=1-ff1;
+out1=imfreqfilt(I,ff1);
+% ff2=imgaussflpf(I,sigma3);ff2=1-ff2;
+ff2 = ff1 - ff;
+out2=imfreqfilt(I,ff2);
+figure;
+subplot(1,4,1);imshow(I);title('Original');
+subplot(1,4,2);imshow(mat2gray(abs(out)));title('Image after sigma=10');
+subplot(1,4,3);imshow(mat2gray(abs(out1)));title('Image after sigma=20');
+subplot(1,4,4);imshow(mat2gray(abs(out2)));title('Image after sigma=30');
+
+figure;
+imshow(mat2gray(abs(ff2)));
