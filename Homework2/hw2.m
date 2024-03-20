@@ -1,36 +1,116 @@
 %% ELEG4512 HW2
-clear
-close all
-clc
-hw1a=imread('hw1.tif');
-hw1a = im2double(hw1a);
+clear;
+close all;
+clc;
 
-% Creating laplacian Filter
-laplacianFilter = fspecial('laplacian',0);
+% input a gray-scale image ‘2.tif’
+originalImage = im2double(imread('2.tif'));
+[m, n]=size(originalImage);
 
-hw1b = imfilter(hw1a, laplacianFilter);
-hw1c = imsubtract(hw1a,hw1b);
+%% Part I
+% Add pepper noise to the image
+tmp_mask = rand(m,n);
+pepper_idx = find(tmp_mask <= 0.1);
+pepperNoiseImage = originalImage;
+pepperNoiseImage(pepper_idx) = 0;
 
-% Creating sobel Filter
-sobelFilter = fspecial('sobel');
-hw1d = imfilter(hw1a, sobelFilter);
+% using 3x3 Contraharmonic Filter with parameter Q = 1.5
+meanFilterImage = Contraharmonic_Filter(pepperNoiseImage, [3,3], 1.5);
+
+% Apply order-statistics (median) filter to remove noise
+orderStatisticsFilteredImage =  ordfilt2(pepperNoiseImage,5,ones(3,3), 'symmetric');
+
+% Plot the images
+figure;
+subplot(2,2,1);imshow(originalImage);title('Original Image');
+subplot(2,2,2);imshow(pepperNoiseImage);title('Pepper Noise Image');
+subplot(2,2,3);imshow(meanFilterImage);title('Maen Filtered Image (1.5)');
+subplot(2,2,4);imshow(orderStatisticsFilteredImage);title('Order-Statistics Filtered Image');
 
 
-% Creating avgerage Filter
-fiveFiveAvgFilter = 1/ (5. ^2)*ones (5);
-hw1e = imfilter(hw1d, fiveFiveAvgFilter); 
 
-hw1f = hw1e .* hw1c;
-hw1g = imadd(hw1f, hw1a);
-hw1h = imadjust(hw1f,[],[], 0.2);
+%% Part II
+% Add motion and Gaussian noise to the image
+noise_var=0.1;
+PSF = fspecial('motion',10,45);                           
+gb = imfilter(originalImage,PSF,'circular');                         
+noise = imnoise(zeros(size(originalImage)),'gaussian',0,noise_var);      
+motionGaussiannoiseImage = double(gb) + noise;
+
+% Apply inverse filter to remove noise
+inverseFilteredImage = deconvwnr(motionGaussiannoiseImage,PSF);   
+
+% Apply wiener filters to remove noise
+Sn = abs(fft(noise)).^2;
+nA = sum(Sn(:))/numel(noise);
+Sf = abs(fft2(originalImage)).^2;
+fA = sum(Sf(:))/numel(originalImage);
+R = nA/fA;
+wienerFilteredImage = deconvwnr(motionGaussiannoiseImage,PSF,R);
+
+estimated_NSR = noise_var / var(motionGaussiannoiseImage(:));
+
+NCORR = fftshift(real(ifft2(Sn)));                       
+ICORR = fftshift(real(ifft2(Sf)));  
+wienerFilteredImage2 = deconvwnr(motionGaussiannoiseImage,PSF,estimated_NSR);
+
+% Plot the images
+figure;
+subplot(2,2,1);imshow(originalImage);title('Original Image');
+subplot(2,2,2);imshow(motionGaussiannoiseImage);title('Motion and Gaussian Noise Image');
+subplot(2,2,3);imshow(inverseFilteredImage);title('Inverse Filtered Image');
+subplot(2,2,4);imshow(wienerFilteredImage2);title('Wiener Filtered Image');
+
+%% Part II (second trial)
+% Simulate a Motion Blur?H(u,v)
+T=1;a=0.02;b=0.02;
+v=-m/2:m/2-1;u=v';
+A=repmat(a.*u,1,m)+repmat(b.*v,m,1);
+H=T/pi./A.*sin(pi.*A).*exp(-1i*pi.*A);
+H(A==0)=T;% replace NAN
+
+F=fftshift(fft2(originalImage));
+FBlurred=F.*H;
+
+noise_mean = 0;
+noise_var = 1e-3;
+noise=imnoise(zeros(m),'gaussian', noise_mean,noise_var);
+FNoise=fftshift(fft2(noise));
+
+% Get the Blurred_Noised Image
+FBlurred_Noised=FNoise+FBlurred;
+
+% Display the blurred_noised image
+IBlurred_Noised=real(ifft2(ifftshift(FBlurred_Noised)));
+motionGaussiannoiseImageV2 = uint8(255.*mat2gray(IBlurred_Noised));
+
+% deblur with parametr bestRadius=30;
+maxPSNR=0;
+bestRadius=30;
+
+% Displace the best Restoration
+FDeblurred2=zeros(m);
+for a=1:m
+    for b=1:m
+        if sqrt((a-m/2).^2+(b-m/2).^2)<bestRadius
+            FDeblurred2(a,b)= FBlurred_Noised(a,b)./H(a,b);
+        end
+    end
+end
+
+FH2=abs(FDeblurred2);
+
+IDeblurred2=real(ifft2(ifftshift(FDeblurred2)));
+inverseFilteredImageV2 = uint8(255.*mat2gray(IDeblurred2));
+
+
+noise_varV2=0.1;
+PSFV2 = fspecial('motion',10,45);
+estimated_NSRV2 = noise_varV2 / var(originalImage(:));
+wienerFilteredImageV2 = deconvwnr(motionGaussiannoiseImageV2,PSFV2,estimated_NSRV2);
 
 figure;
-subplot(2,4,1);imshow(hw1a);title('(a): Original');
-subplot(2,4,2);imshow(hw1b, []);title('(b): laplacian');
-subplot(2,4,3);imshow(hw1c, []);title('(c): (a)-(b)');
-subplot(2,4,4);imshow(hw1d);title('(d): sobel');
-subplot(2,4,5);imshow(hw1e);title('(e): (d) with 5*5 avg filter');
-subplot(2,4,6);imshow(hw1f);title('(f)');
-subplot(2,4,7);imshow(hw1g);title('(g)');
-subplot(2,4,8);imshow(hw1h, []);title('(h): (g) gamma=0.2');
-
+subplot(2,2,1);imshow(originalImage);title('Original Image');
+subplot(2,2,2);imshow(motionGaussiannoiseImageV2);title('Motion and Gaussian Noise Image');
+subplot(2,2,3);imshow(inverseFilteredImageV2);title('Restoration with Inverse filter (r=30)');
+subplot(2,2,4);imshow(wienerFilteredImageV2);title('Wiener Filtered Image');
